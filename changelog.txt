@@ -1,0 +1,3 @@
+[FIXED]
+* We fixed some bugs reported by users
+* Fixed version checking
