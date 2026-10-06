@@ -36,7 +36,7 @@ This edition is engineered with a **zero-telemetry, offline-first** philosophy, 
 - One-tap access via the toolbar bug icon and the Root Diagnostics panel, featuring instant clipboard export and log clearing.
 
 ### 👤 Robust Contact & LID Resolution
-- Advanced SQLite resolver that queries contacts across both phone JIDs and WhatsApp Linked IDs (`@lid`).
+- Advanced SQLite resolver that queries contacts across both phone JIDs and WhatsApp Linked IDs (LID).
 - Automatic fallback to WhatsApp push names (`wa_name`), eliminating raw 15-digit numeric IDs from toast notifications, online status alerts, and anti-revoke messages.
 
 ### 🎨 Modern Material 3 Electric Indigo Theme
