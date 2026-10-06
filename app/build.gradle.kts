@@ -36,7 +36,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.wmods.wppenhacer"
+        applicationId = "io.github.themrsami.waenhancer"
         minSdk = 28
         //noinspection OldTargetApi
         targetSdk = 34
