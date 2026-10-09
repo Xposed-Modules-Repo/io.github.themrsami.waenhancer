@@ -177,19 +177,16 @@ class FeatureLoader {
                             SharedPreferencesWrapper.hookInit(application.classLoader)
                             ReflectionUtils.initCache(application)
 
-                            val isSupported = supportedVersions?.any { s ->
-                                packageInfo.versionName?.startsWith(s.replace(".xx", "")) ?: false
-                            } ?: false
+                            val isSupported = isSupportedVersion(packageInfo.versionName, supportedVersions)
+
+                            try {
+                                disableExpirationVersion(application.classLoader)
+                            } catch (e: Throwable) {
+                                XposedBridge.log("Failed to disable expiration: ${e.message}")
+                            }
 
                             if (!isSupported) {
-                                disableExpirationVersion(application.classLoader)
-                                if (!pref.getBoolean("bypass_version_check", false)) {
-                                    val errorMsg = """
-                                        Unsupported version: ${packageInfo.versionName}
-                                        Only the function of ignoring the expiration of the WhatsApp version has been applied!
-                                    """.trimIndent()
-                                    throw Exception(errorMsg)
-                                }
+                                XposedBridge.log("Running on unverified version: ${packageInfo.versionName}. Attempting dynamic feature loading.")
                             }
 
                             initComponents(loader, pref)
@@ -234,34 +231,8 @@ class FeatureLoader {
                         if (param.thisObject.javaClass.simpleName != "HomeActivity") return
                         val errors = synchronized(list) { list.toList() }
                         if (errors.isNotEmpty()) {
-                            val activity = param.thisObject as Activity
-                            val msg =
-                                errors.joinToString("\n") { "${it.pluginName} - ${it.message}" }
-
-                            AlertDialogWpp(activity)
-                                .setTitle(activity.getString(R.string.error_detected))
-                                .setMessage(
-                                    "${activity.getString(R.string.version_error)}$msg\n\nCurrent Version: $currentVersion\nSupported Versions:\n${
-                                        supportedVersions?.joinToString(
-                                            "\n"
-                                        )
-                                    }"
-                                )
-                                .setPositiveButton(activity.getString(R.string.copy_to_clipboard)) { dialog, _ ->
-                                    val clipboard =
-                                        mApp?.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText(
-                                        "text",
-                                        errors.joinToString("\n") { it.toString() })
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(
-                                        mApp,
-                                        R.string.copied_to_clipboard,
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    dialog.dismiss()
-                                }
-                                .show()
+                            val msg = errors.joinToString("\n") { "${it.pluginName} - ${it.message}" }
+                            XposedBridge.log("[WaEnhancer] Non-fatal hook issues logged:\n$msg")
                         }
                     }
                 })
@@ -356,21 +327,82 @@ class FeatureLoader {
         }
 
 
+        private var isExpirationDisabled = false
+
         @JvmStatic
-        @Throws(Exception::class)
+        fun isSupportedVersion(version: String?, supportedList: List<String>?): Boolean {
+            if (version.isNullOrBlank()) return false
+            if (supportedList != null && supportedList.any { version.startsWith(it.replace(".xx", "")) }) {
+                return true
+            }
+            return try {
+                val parts = version.split('.').mapNotNull { it.toIntOrNull() }
+                if (parts.size >= 2) {
+                    val major = parts[0]
+                    val minor = parts[1]
+                    major > 2 || (major == 2 && minor >= 24)
+                } else {
+                    false
+                }
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        @JvmStatic
+        @Synchronized
         fun disableExpirationVersion(classLoader: ClassLoader) {
-            val expirationClass = Unobfuscator.loadExpirationClass(classLoader)
-            val methods =
-                ReflectionUtils.findAllMethodsUsingFilter(expirationClass) { m -> m.returnType == Date::class.java }
-            for (method in methods) {
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val calendar = Calendar.getInstance().apply {
-                            set(2099, 11, 31)
+            if (isExpirationDisabled) return
+            try {
+                val expirationClass = Unobfuscator.loadExpirationClass(classLoader)
+
+                // 1. Hook Date methods (returns Year 2099 date)
+                val dateMethods =
+                    ReflectionUtils.findAllMethodsUsingFilter(expirationClass) { m -> m.returnType == Date::class.java }
+                for (method in dateMethods) {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val calendar = Calendar.getInstance().apply {
+                                set(2099, 11, 31, 23, 59, 59)
+                            }
+                            param.result = calendar.time
                         }
-                        param.result = calendar.time
+                    })
+                }
+
+                // 2. Hook boolean methods (isExpired, isNearExpiration -> false)
+                val booleanMethods =
+                    ReflectionUtils.findAllMethodsUsingFilter(expirationClass) { m ->
+                        m.returnType == java.lang.Boolean.TYPE || m.returnType == java.lang.Boolean::class.java
                     }
-                })
+                for (method in booleanMethods) {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.result = false
+                        }
+                    })
+                }
+
+                // 3. Hook Long methods (epoch timestamps > 1000000000000L -> Year 2099)
+                val longMethods =
+                    ReflectionUtils.findAllMethodsUsingFilter(expirationClass) { m ->
+                        m.returnType == java.lang.Long.TYPE || m.returnType == java.lang.Long::class.java
+                    }
+                for (method in longMethods) {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            val result = param.result
+                            if (result is Long && result > 1000000000000L) {
+                                param.result = 4102444800000L // 2099-12-31 23:59:59 UTC
+                            }
+                        }
+                    })
+                }
+
+                isExpirationDisabled = true
+                XposedBridge.log("[WaEnhancer] Successfully disabled WhatsApp expiration permanently (Year 2099 bypass applied).")
+            } catch (e: Throwable) {
+                XposedBridge.log("[WaEnhancer] Failed to disable expiration: ${e.message}")
             }
         }
 

@@ -393,7 +393,7 @@ class HomeFragment : BaseFragment() {
     }
 
     private fun isSupportedVersion(version: String?, supportedVersions: List<String>): Boolean {
-        return version != null && supportedVersions.any { version.startsWith(it.replace(".xx", "")) }
+        return FeatureLoader.isSupportedVersion(version, supportedVersions)
     }
 
     private fun disableBusiness() {

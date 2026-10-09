@@ -2004,6 +2004,7 @@ object Unobfuscator {
                 "software_forced_expiration"
             )
             val expirationMethod = methods.firstOrNull { it.returnType == Date::class.java }
+                ?: methods.firstOrNull()
                 ?: throw RuntimeException("Expiration class not found")
             return@getClass expirationMethod.declaringClass
         }

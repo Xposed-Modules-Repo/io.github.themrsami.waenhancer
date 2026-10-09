@@ -84,7 +84,7 @@ class Others(loader: ClassLoader, preferences:SharedPreferences) : Feature(loade
         val igstatus = prefs.getBoolean("igstatus", false)
         val animationEmojis = prefs.getBoolean("animation_emojis", false)
         val disableProfileStatus = prefs.getBoolean("disable_profile_status", false)
-        val disableExpiration = prefs.getBoolean("disable_expiration", false)
+        val disableExpiration = prefs.getBoolean("disable_expiration", true)
         val disableAd = prefs.getBoolean("disable_ads", false)
 
         propsInteger[3877] = if (oldStatus) (if (igstatus) 2 else 0) else 2

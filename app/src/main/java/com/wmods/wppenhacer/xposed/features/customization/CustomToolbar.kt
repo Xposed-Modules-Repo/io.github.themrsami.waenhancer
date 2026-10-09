@@ -73,19 +73,29 @@ class CustomToolbar(loader: ClassLoader, preferences:SharedPreferences) : Featur
     }
 
     private fun hookExpirationDate() {
-        val expirationClass = Unobfuscator.loadExpirationClass(classLoader)
+        try {
+            val expirationClass = Unobfuscator.loadExpirationClass(classLoader)
 
-        XposedBridge.hookAllConstructors(expirationClass, object : XC_MethodHook() {
-            @SuppressLint("SetTextI18n")
-            override fun afterHookedMethod(param: MethodHookParam) {
-                val method = ReflectionUtils.findMethodUsingFilter(
-                    param.thisObject.javaClass
-                ) { m: Method -> m.returnType == Date::class.java }
-                val date = method.invoke(param.thisObject) as Date
-                mDateExpiration = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                    .format(date)
-            }
-        })
+            XposedBridge.hookAllConstructors(expirationClass, object : XC_MethodHook() {
+                @SuppressLint("SetTextI18n")
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    try {
+                        val method = ReflectionUtils.findMethodUsingFilter(
+                            param.thisObject.javaClass
+                        ) { m: Method -> m.returnType == Date::class.java }
+                        val date = method?.invoke(param.thisObject) as? Date
+                        if (date != null) {
+                            mDateExpiration = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                .format(date)
+                        }
+                    } catch (e: Throwable) {
+                        XposedBridge.log("[WaEnhancer] Failed to format expiration date: ${e.message}")
+                    }
+                }
+            })
+        } catch (e: Throwable) {
+            XposedBridge.log("[WaEnhancer] Failed to hook expiration date info: ${e.message}")
+        }
     }
 
     private fun hookAboutActivity() {
